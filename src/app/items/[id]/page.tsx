@@ -1,47 +1,27 @@
-// src/app/items/[id]/page.tsx
-import { supabaseAdmin } from '@/lib/supabaseAdmin';
+// app/items/[id]/page.tsx
+type PageProps = { params: { id: string } };
 
-// 캐싱 이슈 피하고 즉시 최신 조회하려면(선택)
-// export const dynamic = 'force-dynamic';
-
-export default async function ItemPage({ params }: { params: { id: string } }) {
-  const id = Number(params.id);
-  if (Number.isNaN(id)) return <div>잘못된 매물 ID입니다.</div>;
-
-  // Vercel에 서버용 키가 없으면 바로 원인 표시
-  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    return <pre>SERVER ENV MISSING: SUPABASE_SERVICE_ROLE_KEY</pre>;
+async function getItem(id: string) {
+  // 예시: 내부 API 보다는 외부 호출/DB라면 직접 여기서 처리 추천
+  const res = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'}/api/items/${id}`, {
+    // 서버 컴포넌트 fetch의 캐시 전략을 명시 (필요시)
+    cache: 'no-store',
+  });
+  if (!res.ok) {
+    // 에러 표면화해서 error.tsx로 흘려보내기
+    throw new Error(`Failed to load item ${id}: ${res.status}`);
   }
+  return res.json() as Promise<{ id: string; title: string; description?: string }>;
+}
 
-  try {
-    const { data, error } = await supabaseAdmin
-      .from('properties')
-      .select('id,title,address,deposit,monthly_rent,address, property_images(url,sort_order)')
-      .eq('id', id)
-      .maybeSingle(); // 결과 없으면 data=null
+export default async function ItemPage({ params }: PageProps) {
+  const item = await getItem(params.id);
 
-    if (error) return <pre>DB ERROR: {error.message}</pre>;
-    if (!data) return <div>매물을 찾을 수 없습니다.</div>;
-
-    return (
-      <article>
-        <h1 style={{ fontSize: 28, fontWeight: 900 }}>{data.title}</h1>
-        <p style={{ color: '#666' }}>{data.address}</p>
-
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))', gap:12, margin:'16px 0' }}>
-          {(data.property_images ?? []).map((img: any, i: number) => (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img key={i} src={img.url} alt={data.title} style={{ width:'100%', height:220, objectFit:'cover', borderRadius:12 }} />
-          ))}
-        </div>
-
-        <ul style={{ lineHeight: 1.9 }}>
-          <li>보증금: {data.deposit?.toLocaleString?.() ?? '-'}</li>
-          <li>월세: {data.monthly_rent?.toLocaleString?.() ?? '-'}</li>
-        </ul>
-      </article>
-    );
-  } catch (e: any) {
-    return <pre>UNEXPECTED: {String(e?.message ?? e)}</pre>;
-  }
+  return (
+    <main style={{ padding: 24 }}>
+      <h1>{item.title}</h1>
+      <p>ID: {item.id}</p>
+      {item.description && <p>{item.description}</p>}
+    </main>
+  );
 }
